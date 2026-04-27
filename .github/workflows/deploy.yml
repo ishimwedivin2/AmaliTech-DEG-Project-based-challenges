@@ -38,9 +38,19 @@ jobs:
         working-directory: dev-ops/DeployReady/app
         run: npm test
 
-      # Build Docker image
+      # Build Docker image (with diagnostics)
       - name: Build image
-        run: docker build -t $IMAGE_NAME:${{ github.sha }} -f dev-ops/DeployReady/Dockerfile dev-ops/DeployReady
+        run: |
+          echo "== docker version =="
+          docker --version || true
+          echo "== workspace listing =="
+          ls -la
+          echo "== dev-ops/DeployReady listing =="
+          ls -la dev-ops/DeployReady || true
+          echo "== Dockerfile contents =="
+          sed -n '1,200p' dev-ops/DeployReady/Dockerfile || true
+          echo "== building image =="
+          docker build -t $IMAGE_NAME:${{ github.sha }} -f dev-ops/DeployReady/Dockerfile dev-ops/DeployReady --progress=plain
 
       # Login to GHCR
       - name: Login to GHCR
