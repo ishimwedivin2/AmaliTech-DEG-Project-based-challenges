@@ -2,9 +2,9 @@ services:
   app:
     build:
       context: .
-      dockerfile: DockerFile
+      dockerfile: Dockerfile
     container_name: kora-api
     ports:
       - "3000:3000"
     env_file:
-      - .env.example
+      - .env
