@@ -1,0 +1,75 @@
+name: Deploy Kora API
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ secrets.GHCR_USERNAME }}/kora-api
+
+    steps:
+      # Checkout repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Prepare Node.js runtime
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Install dependencies
+      - name: Install dependencies
+        working-directory: dev-ops/DeployReady/app
+        run: npm ci
+
+      # Run tests
+      - name: Run tests
+        working-directory: dev-ops/DeployReady/app
+        run: npm test
+
+      # Build Docker image
+      - name: Build image
+        run: docker build -t $IMAGE_NAME:${{ github.sha }} -f dev-ops/DeployReady/Dockerfile dev-ops/DeployReady
+
+      # Login to GHCR
+      - name: Login to GHCR
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+      # Push image
+      - name: Push image
+        run: docker push $IMAGE_NAME:${{ github.sha }}
+
+      # Deploy on EC2
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            IMAGE_TAG="${{ github.sha }}"
+
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+            docker pull "$IMAGE_NAME:$IMAGE_TAG"
+            docker rm -f kora-api || true
+
+            docker run -d \
+              --name kora-api \
+              --restart unless-stopped \
+              -p 80:3000 \
+              -e PORT=3000 \
+              "$IMAGE_NAME:$IMAGE_TAG"
