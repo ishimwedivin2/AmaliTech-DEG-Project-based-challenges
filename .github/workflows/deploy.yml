@@ -57,7 +57,7 @@ jobs:
           echo "== Dockerfile contents =="
           sed -n '1,200p' dev-ops/DeployReady/Dockerfile || true
           echo "== building image =="
-          docker build -t $IMAGE_NAME:${{ github.sha }} -f dev-ops/DeployReady/Dockerfile dev-ops/DeployReady --progress=plain
+          docker buildx build --load --progress=plain -t $IMAGE_NAME:${{ github.sha }} -f dev-ops/DeployReady/Dockerfile dev-ops/DeployReady
 
       # Login to GHCR
       - name: Login to GHCR
