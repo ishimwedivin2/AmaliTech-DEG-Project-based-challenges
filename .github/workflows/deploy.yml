@@ -15,6 +15,7 @@ jobs:
 
     env:
       IMAGE_NAME: ghcr.io/${{ secrets.GHCR_USERNAME }}/kora-api
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
       # Checkout repository code
