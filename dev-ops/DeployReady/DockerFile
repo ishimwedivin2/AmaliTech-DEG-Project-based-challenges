@@ -1,0 +1,24 @@
+# use official node image
+FROM node:18-alpine
+
+#create app directory
+WORKDIR /app
+
+#copy package files 1st (for caching)
+COPY app/package*.json ./
+
+#install dependencies
+RUN npm install
+
+#copy app source
+COPY app/ .
+
+#create non-root user(required by chalenge)
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+#expose port
+EXPOSE 3000
+
+#start app
+CMD ["npm", "start"]
