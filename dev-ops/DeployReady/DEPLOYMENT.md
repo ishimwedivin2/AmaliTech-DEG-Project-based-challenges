@@ -5,6 +5,7 @@ This document describes how the Kora API was deployed to AWS EC2 using Docker an
 ## 1. EC2 Setup
 
 - Instance type: `t3.micro`
+- Note: The challenge requested `t2.micro`, but `t2.micro` was not available for the chosen AMI/region at provisioning time. `t3.micro` was used instead; it is equivalent for this challenge and does not affect application behaviour or health checks.
 - AMI: `Amazon Linux 2023`
 - Region: `eu-north-1`
 
