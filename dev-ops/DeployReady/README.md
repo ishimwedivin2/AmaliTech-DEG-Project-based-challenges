@@ -1,35 +1,31 @@
-# DeployReady
+﻿# DeployReady - Kora API DevOps Implementation
 
-This challenge is designed to test your understanding of core DevOps practices: containerisation, automated pipelines, and cloud deployment.
+This repository contains my implementation of the DeployReady challenge for Kora Analytics.
 
----
+I containerized the Node.js API, created an automated CI/CD workflow with GitHub Actions, pushed the image to GitHub Container Registry, and deployed the service to AWS EC2.
 
-## 1. Business Context
+## Architecture Overview
 
-**Client:** Kora Analytics
-**Industry:** SaaS — Data dashboards for logistics companies
+Deployment flow:
 
-### The Problem
+1. Developer pushes code to `main`.
+2. GitHub Actions runs tests in `app/`.
+3. Workflow builds Docker image tagged with commit SHA and `latest`.
+4. Workflow pushes image to GitHub Container Registry.
+5. Workflow SSHes into EC2, pulls the latest image, and restarts the `kora-api` container.
+6. The service is exposed publicly on EC2 port `80`.
 
-Every time the Kora team wants to deploy a new version of their app, a developer manually SSHs into the server, pulls the code, and restarts the process by hand. There are no automated tests before a release and no way to tell if a deploy broke something until a customer complains.
+## Application Endpoints
 
-### Your Role
+The API exposes:
 
-You are joining as their first DevOps engineer. The application code already works — your job is to **containerise it, automate the delivery pipeline, and get it running on AWS**.
+- `GET /health` returns `{"status":"ok"}`
+- `GET /metrics` returns uptime and memory usage
+- `POST /data` echoes a JSON payload
 
----
+## Local Development
 
-## 2. The Application
-
-A simple Node.js API is provided in the [`app/`](./app/) directory. It has three endpoints:
-
-| Method | Route      | Description                            |
-| ------ | ---------- | -------------------------------------- |
-| GET    | `/health`  | Returns `{ "status": "ok" }`           |
-| GET    | `/metrics` | Returns uptime and memory usage        |
-| POST   | `/data`    | Accepts a JSON body and echoes it back |
-
-Run it locally:
+Run locally without Docker:
 
 ```bash
 cd app
@@ -37,104 +33,109 @@ npm install
 npm start
 ```
 
-Do not change the application logic. Your work is everything around it.
+Run with Docker Compose:
 
----
+```bash
+docker compose up --build
+```
 
-## 3. The Assignment
+Health check:
 
-### Part 1 — Containerise the App
+```bash
+curl http://localhost:3000/health
+```
 
-**Deliverables:** A `Dockerfile` and a `docker-compose.yml` in the root of your repository.
+## Containerization
 
-**Dockerfile requirements:**
+- `Dockerfile` runs the app on Node 18 Alpine.
+- The container runs as a non-root user.
+- The app reads `PORT` from the environment.
+- `docker-compose.yml` maps `3000:3000` for local usage.
+- `.env.example` is included with placeholder values.
 
-- The app must run inside a Docker container.
-- The container must accept a `PORT` environment variable.
-- The container must **not** run as the `root` user.
+## CI/CD Pipeline
 
-**Docker Compose requirements:**
+Workflow file: `.github/workflows/deploy.yml`
 
-- Define the app as a service in `docker-compose.yml`.
-- Map port `3000` on the host to the container.
-- Pass the `PORT` variable via an `.env` file (include a `.env.example` with placeholder values).
-- Running the following must start a working API:
-  ```bash
-  docker compose up --build
-  ```
+Pipeline order on push to `main`:
 
----
+1. Install dependencies
+2. Run tests (`npm test`)
+3. Build image tagged with `${{ github.sha }}` and `latest`
+4. Login and push to GHCR
+5. Deploy on EC2 over SSH
 
-### Part 2 — Automate the Pipeline
+Required secrets:
 
-**Deliverable:** A `.github/workflows/deploy.yml` GitHub Actions workflow.
+- `GHCR_USERNAME`
+- `GHCR_TOKEN`
+- `EC2_HOST`
+- `EC2_USER`
+- `EC2_SSH_KEY`
 
-The pipeline must run these steps **in order** on every push to `main`:
+## AWS Deployment Summary
 
-1. **Test** — Run `npm test`. If tests fail, the pipeline stops. Nothing gets deployed.
-2. **Build** — Build the Docker image and tag it with the Git commit SHA.
-3. **Push** — Push the image to a container registry (GitHub Container Registry or AWS ECR).
-4. **Deploy** — Pull the new image on the EC2 server and restart the container.
+- Region: `eu-north-1`
+- EC2 Public IP: `16.171.134.13`
+- EC2 OS: Amazon Linux 2023
+- Security Group:
+  - HTTP `80` from `0.0.0.0/0`
+  - SSH `22` from my IP only (`/32`)
 
-Additional requirements:
+Public health check:
 
-- Secrets (SSH key, registry token) must be stored as **GitHub repository secrets** — never in the code.
-- Add a short comment above each step in the YAML explaining what it does.
+```bash
+curl http://16.171.134.13/health
+```
 
----
+Expected response:
 
-### Part 3 — Deploy to AWS
+```json
+{"status":"ok"}
+```
 
-**Deliverable:** A running service on AWS and a short `DEPLOYMENT.md` explaining your setup.
+## Decisions and Notes
 
-Provision the following manually (via the AWS Console is fine):
+- Used GHCR for image hosting to keep CI/CD integrated with GitHub.
+- Used Docker on EC2 for simple and repeatable deployment.
+- Kept the application logic unchanged and focused on DevOps requirements.
 
-- An **EC2 instance** (`t2.micro`, Amazon Linux 2023) with Docker installed.
-- A **Security Group** that allows:
-  - HTTP on port 80 from anywhere
-  - SSH on port 22 **from your IP only** — not `0.0.0.0/0`
-- An **IAM user or role** for the pipeline with only the permissions it needs.
+## Problems Faced and How I Solved Them
 
-At submission time, `GET http://<your-ec2-ip>/health` must return `{ "status": "ok" }`.
+### 1. `GET /data` did not work
 
-Document in `DEPLOYMENT.md`:
+I first tested `/data` with a `GET` request and got `Cannot GET /data`.
+After checking the application contract, I confirmed that `/data` only supports `POST`.
+I then retried it with a JSON body using a `POST` request, which returned the expected response.
 
-- How you set up the EC2 instance
-- How you installed Docker and pulled your image
-- How to check if the container is running
-- How to view the application logs
+Correct test:
 
----
+```bash
+curl -X POST http://localhost:3000/data \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test"}'
+```
 
-## 4. Bonus (Optional)
+### 2. PowerShell treated `curl` differently
 
-Pick **one** of the following if you want to go further:
+In PowerShell, `curl` is not always the same as Linux `curl`.
+My multiline command split `-d` into a separate line, so PowerShell treated it like a new command.
+I fixed it by using `Invoke-RestMethod` with `-Method Post`, which worked correctly.
 
-- **Use Terraform** to provision the EC2 instance and Security Group instead of the console.
-- **Add a CloudWatch alarm** that triggers if `/health` stops responding.
-- **Implement a rollback step** in the pipeline that re-deploys the previous image if the health check fails after deploy.
+PowerShell-safe test:
 
-Describe what you added and why in your `DEPLOYMENT.md`.
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:3000/data -ContentType "application/json" -Body '{"name":"test"}'
+```
 
----
+### 3. GHCR login scope issue
 
-## 5. Submission Instructions
+At first, Docker push to GHCR failed because the token did not have the right package scopes.
+I created a new classic GitHub PAT with the required package permissions and then the push succeeded.
 
-1. **Fork** this repository.
-2. Complete all three parts in your fork.
-3. **Replace this README** with your own documentation (architecture overview, setup steps, decisions made).
-4. Submit your repo link via the [online form](https://forms.cloud.microsoft/e/f3FF83LVz3).
+### 4. SSH access changed because my IP changed
 
----
+My SSH rule needed to match my current public IP.
+I updated the Security Group inbound rule to allow SSH from my current `/32` IP only, which let me connect to EC2 securely.
 
-## ⚠️ Pre-Submission Checklist
-
-- [ ] `docker compose up --build` starts the app locally
-- [ ] A `.env.example` file is committed (the real `.env` is not)
-- [ ] At least one successful pipeline run is visible in the GitHub Actions tab
-- [ ] `GET /health` on your EC2 public IP returns 200
-- [ ] No secrets or `.pem` files committed to the repository
-- [ ] SSH port 22 is **not** open to `0.0.0.0/0`
-- [ ] `DEPLOYMENT.md` is present and covers the four points in Part 3
-- [ ] This README has been replaced with your own documentation
-- [ ] Commit history shows progress over time (not a single upload commit)
+Detailed AWS setup and operations are documented in `DEPLOYMENT.md`.

@@ -15,18 +15,17 @@ jobs:
 
     env:
       IMAGE_NAME: ghcr.io/${{ secrets.GHCR_USERNAME }}/kora-api
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
       # Checkout repository code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Prepare Node.js runtime
+      # Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # Install dependencies
       - name: Install dependencies
@@ -38,26 +37,14 @@ jobs:
         working-directory: dev-ops/DeployReady/app
         run: npm test
 
-      # Setup QEMU (for cross-platform builds) and Buildx
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      # Build Docker image (with diagnostics)
+      # Build Docker image (CLEAN VERSION)
       - name: Build image
         run: |
-          echo "== docker version =="
-          docker --version || true
-          echo "== workspace listing =="
-          ls -la
-          echo "== dev-ops/DeployReady listing =="
-          ls -la dev-ops/DeployReady || true
-          echo "== Dockerfile contents =="
-          sed -n '1,200p' dev-ops/DeployReady/Dockerfile || true
-          echo "== building image =="
-          docker buildx build --load --progress=plain -t $IMAGE_NAME:${{ github.sha }} -f dev-ops/DeployReady/Dockerfile dev-ops/DeployReady
+          docker build \
+            -t $IMAGE_NAME:${{ github.sha }} \
+            -t $IMAGE_NAME:latest \
+            -f dev-ops/DeployReady/Dockerfile \
+            dev-ops/DeployReady
 
       # Login to GHCR
       - name: Login to GHCR
@@ -65,7 +52,9 @@ jobs:
 
       # Push image
       - name: Push image
-        run: docker push $IMAGE_NAME:${{ github.sha }}
+        run: |
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
 
       # Deploy on EC2
       - name: Deploy to EC2
@@ -77,12 +66,12 @@ jobs:
           script: |
             set -e
 
-            IMAGE_NAME="${{ env.IMAGE_NAME }}"
-            IMAGE_TAG="${{ github.sha }}"
+            IMAGE_NAME="ghcr.io/${{ secrets.GHCR_USERNAME }}/kora-api"
 
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            docker pull "$IMAGE_NAME:$IMAGE_TAG"
+            docker pull "$IMAGE_NAME:latest"
+
             docker rm -f kora-api || true
 
             docker run -d \
@@ -90,4 +79,4 @@ jobs:
               --restart unless-stopped \
               -p 80:3000 \
               -e PORT=3000 \
-              "$IMAGE_NAME:$IMAGE_TAG"
+              "$IMAGE_NAME:latest"

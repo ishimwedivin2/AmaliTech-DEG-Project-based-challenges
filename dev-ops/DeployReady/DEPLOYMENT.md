@@ -4,18 +4,18 @@ This document describes how the Kora API was deployed to AWS EC2 using Docker an
 
 ## 1. EC2 Setup
 
-- Instance type: `t2.micro`
+- Instance type: `t3.micro`
 - AMI: `Amazon Linux 2023`
-- Region: `<YOUR_AWS_REGION>`
+- Region: `eu-north-1`
 
 Security Group rules used:
 
 - Inbound `HTTP` port `80` from `0.0.0.0/0`
-- Inbound `SSH` port `22` from `<YOUR_PUBLIC_IP>/32`
+- Inbound `SSH` port `22` from my current public IP only (`/32`)
 
 The EC2 public IP is:
 
-- `<YOUR_EC2_PUBLIC_IP>`
+- `16.171.134.13`
 
 ## 2. Docker Installation on EC2
 
@@ -42,7 +42,7 @@ The pipeline in `.github/workflows/deploy.yml` performs these stages in order on
 
 Image format used:
 
-- `ghcr.io/<GHCR_USERNAME>/kora-api:<GIT_SHA>`
+- `ghcr.io/ishimwedivin2/kora-api:<GIT_SHA>`
 
 Container run command used by pipeline:
 
@@ -52,7 +52,7 @@ docker run -d \
 	--restart unless-stopped \
 	-p 80:3000 \
 	-e PORT=3000 \
-	ghcr.io/<GHCR_USERNAME>/kora-api:<GIT_SHA>
+	ghcr.io/ishimwedivin2/kora-api:<GIT_SHA>
 ```
 
 ## 4. Verifying Container Health
@@ -68,7 +68,7 @@ Expected: container `kora-api` is `Up` and mapped to `0.0.0.0:80->3000/tcp`.
 Test API health from local machine:
 
 ```bash
-curl http://<YOUR_EC2_PUBLIC_IP>/health
+curl http://16.171.134.13/health
 ```
 
 Expected response:
